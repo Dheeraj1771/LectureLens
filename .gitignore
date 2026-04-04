@@ -214,3 +214,6 @@ audios/
 *.webm
 *.mp4
 *.m4a
+
+# System files
+.DS_Store
