@@ -217,3 +217,13 @@ audios/
 
 # System files
 .DS_Store
+
+# Json files
+jsons/
+
+# Joblib files
+*.joblib
+
+# Temporary Debug files
+prompt.txt
+response.txt
