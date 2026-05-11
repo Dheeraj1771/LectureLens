@@ -14,6 +14,7 @@ def create_embedding(text_list):
     return embedding
 
 def inference(prompt):
+    print("Thinking...")
     r = requests.post("http://localhost:11434/api/generate", json={
         "model" : "llama3.2",
         "prompt" : prompt,

@@ -220,6 +220,7 @@ audios/
 
 # Json files
 jsons/
+newjsons/
 
 # Joblib files
 *.joblib
