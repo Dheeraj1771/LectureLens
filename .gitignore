@@ -228,3 +228,12 @@ newjsons/
 # Temporary Debug files
 prompt.txt
 response.txt
+
+# Ignore the old Codes
+Old_Codes/
+
+# Streamlit secrets file (used for cloud deployment)
+.streamlit/secrets.toml
+
+# Stray output files
+output.json
