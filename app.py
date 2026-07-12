@@ -1,19 +1,20 @@
 import os 
 import re
-import joblib
+import json
 import pandas as pd 
 import numpy as np
 import streamlit as st
 from dotenv import load_dotenv
 from huggingface_hub import InferenceClient
 from groq import Groq
-from sklearn.metrics.pairwise import cosine_similarity
 from youtube_transcript_api import YouTubeTranscriptApi
+from pinecone import Pinecone
 
 # Get The Hugging Face Token from .env File
 load_dotenv()
 HF_TOKEN = os.getenv("HF_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 
 # Initialize the Hugging Face Client
 if HF_TOKEN:
@@ -26,6 +27,15 @@ if GROQ_API_KEY:
     groq_client = Groq(api_key=GROQ_API_KEY)
 else:
     st.error("Missing GROQ_API_KEY in .env File")
+
+# Initialize the Pinecone API Client
+if PINECONE_API_KEY:
+    pc = Pinecone(api_key=PINECONE_API_KEY)
+    pinecone_index = pc.Index("lecturelens")
+else:
+    st.error("Missing PINECONE_API_KEY in .env File")
+
+
     
 def extract_video_id(url):
     # Extract 11 Character Video ID from the URL
@@ -120,18 +130,30 @@ with st.sidebar:
                         embeddings_matrix = create_embedding(text_to_embed)
                         df['embeddings'] = list(embeddings_matrix)
                         
-                        st.write("4. Saving to Database...")
-                        joblib_file = 'embedding.joblib'
+                        st.write("4. Saving to Pinecone Cloud Database...")
+                        vectors_to_upsert = []
+                        for idx, row in df.iterrows():
+                            # Create a unique ID so if a user uploads the same video twice, it overwrites instead of duplicates!
+                            chunk_id = f"{video_id}_{row['start']}"
+                            
+                            # Convert the numpy array to python list for pinecone db
+                            vectror_values = row['embeddings'].tolist()
+                            
+                            # Attach Human Readable text as metadata
+                            metadata = {
+                                "title": row['title'], 
+                                "number": row['number'],
+                                "start": row['start'],
+                                "end": row['end'],
+                                "text": row['text']
+                            }
+                            vectors_to_upsert.append((chunk_id, vectror_values, metadata))
+                       
+                        # upload to the cloud in batches
+                        pinecone_index.upsert(vectors=vectors_to_upsert)
                         
-                        if os.path.exists(joblib_file):
-                            existing_df = joblib.load(joblib_file)
-                            final_df = pd.concat([existing_df, df], ignore_index=True)
-                        else:
-                            final_df = df
-                        joblib.dump(final_df, joblib_file)
-                        
-                        status.update(label="Completed! Video Added.", state='complete', expanded=False)
-                        st.success(f"Successfully Processed, Translated, and Embedded {len(df)} chunks from '{video_title}'.")   
+                        status.update(label="Completed! Video Added to Cloud.", state="complete", expanded=False)
+                        st.success(f"Successfully Processed, Translated, and Embedded {len(df)} chunks from '{video_title}'")
                         
                     except Exception as e:
                        status.update(label="Error Processing Video", state='error', expanded=False)
@@ -140,8 +162,8 @@ with st.sidebar:
             st.warning("Please provide both a URL and a Title.")          
     
 # Main Page
-st.title("🎓 LectureLens - A RAG Based AI teaching Assistant")
-st.subheader("Ask me any topic which you want to learn from this Video!")
+st.title("🎓 LectureLens - A RAG Based AI Teaching Assistant")
+st.subheader("What would you like to learn from this lecture?")
 
 # To keep chat content in place
 if "messages" not in st.session_state:
@@ -155,7 +177,7 @@ if prompt := st.chat_input("E.g., Where is Data Science Basics taught in this co
     # 1. Display the User's Question
     with st.chat_message("user"):
         st.markdown(prompt)
-    st.session_state.message.append({"role": "user", "content": prompt})
+    st.session_state.messages.append({"role": "user", "content": prompt})
     
     # 2. Display the AI's Processing and Answer State
     with st.chat_message("assistant"):
@@ -163,25 +185,30 @@ if prompt := st.chat_input("E.g., Where is Data Science Basics taught in this co
         message_placeholder.markdown("🧠 Searching course materials...")
         
         try:
-            # 3. Load the Dataset
-            df = joblib.load('embedding.joblib')
+            # # 3. Load the Dataset
+            # df = joblib.load('embedding.joblib')
             
-            # 4. Embed the User's Question
-            question_embedding = create_embedding([prompt])[0]
+            # 3. Embed the User's Question and convert it to list
+            question_embedding = create_embedding([prompt])[0].tolist()
             
-            # 5. Cosine Similarity & Top 5 Chunks
-            similarity = cosine_similarity(np.vstack(df["embeddings"].values), [question_embedding]).flatten()
-            top_result = 5
-            max_indx = similarity.argsort()[::-1][0:top_result]
-            new_df = df.loc[max_indx]
+            # 4. Query Pinecone to get top 5 chunks
+            query_result = pinecone_index.query(
+                vector=question_embedding,
+                top_k=5,
+                include_metadata=True
+            )
             
+            # 5. Extract the Metadata from the top5 chunks
+            retrieved_chunks = [match['metadata'] for match in query_result['matches']]
+            # Convert the context into string for LLM to understand
+            context_json = json.dumps(retrieved_chunks)
             message_placeholder.markdown("🤖 Synthesizing Answer...")
             
             # 6. Build the Dynamic Prompt
             system_prompt = f'''You are an AI teaching assistant for an educational video course. 
             Here are the most relevant video subtitle chunks based on the user's query. They contain the video title, video number, start time (seconds), end time (seconds), and the spoken text:
 
-            {new_df[['title', 'number', 'start', 'end', 'text']].to_json(orient='records')}
+            {context_json}
             -----------------------------------------------------------------------
             User's Question: "{prompt}"
 
@@ -208,7 +235,3 @@ if prompt := st.chat_input("E.g., Where is Data Science Basics taught in this co
         except Exception as e:
             message_placeholder.markdown(f"**Error:** {str(e)}\n\n(Did you upload a video yet?)")
             
-    
-    
-
-
