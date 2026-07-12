@@ -1,0 +1,8 @@
+streamlit
+pandas
+numpy
+python-dotenv
+huggingface-hub
+groq
+youtube-transcript-api
+pinecone
