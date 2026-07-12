@@ -1,7 +1,7 @@
 streamlit
 pandas
 numpy
-dotenv
+python-dotenv
 huggingface-hub
 groq
 youtube-transcript-api
