@@ -237,3 +237,6 @@ response.txt
 
 # Stray output files
 output.json
+
+# VS Code settings folder
+.vscode/
