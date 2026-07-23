@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/LectureLens_Banner.png" alt="AI Neural Network Processing" width="100%" height="300" style="object-fit: cover; border-radius: 10px;">
+  <img src="assets/LectureLens_Banner.png" alt="AI Neural Network Processing" width="100%" style="object-fit: cover; border-radius: 10px;">
   
   <h1>🎓 LectureLens: A RAG Based AI Teaching Assistant</h1>
   <p><b>A cloud-native, interactive AI tutor with a decoupled data pipeline, metadata filtering, and an auto-seeking video player.</b></p>
